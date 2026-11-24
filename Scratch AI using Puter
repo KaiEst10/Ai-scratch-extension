@@ -1,0 +1,107 @@
+(function(Scratch) {
+  'use strict';
+
+  if (!Scratch.extensions.unsandboxed) {
+    throw new Error('Puter Chatbot extension must run unsandboxed to load external scripts.');
+  }
+
+  class PuterChatbotExtension {
+    constructor() {
+      this.model = 'gpt-4o-mini';
+      this.systemPrompt = 'You are a helpful AI assistant inside a Scratch project.';
+      this.history = [];
+      this.sdkReady = this.loadPuterSDK();
+    }
+
+    loadPuterSDK() {
+      return new Promise((resolve, reject) => {
+        if (window.puter) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://js.puter.com/v2/';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('Failed to load Puter.js SDK'));
+        document.head.appendChild(script);
+      });
+    }
+
+    getInfo() {
+      return {
+        id: 'puterchatbot',
+        name: 'Puter AI',
+        color1: '#3b82f6',
+        blocks: [
+          {
+            opcode: 'setModel',
+            blockType: Scratch.BlockType.COMMAND,
+            text: 'set AI model to [MODEL]',
+            arguments: {
+              MODEL: { type: Scratch.ArgumentType.STRING, defaultValue: 'gpt-4o-mini' }
+            }
+          },
+          {
+            opcode: 'setSystemPrompt',
+            blockType: Scratch.BlockType.COMMAND,
+            text: 'set bot personality to [PROMPT]',
+            arguments: {
+              PROMPT: { type: Scratch.ArgumentType.STRING, defaultValue: 'You are a friendly NPC.' }
+            }
+          },
+          {
+            opcode: 'askBot',
+            blockType: Scratch.BlockType.REPORTER,
+            text: 'ask Puter AI [MESSAGE]',
+            arguments: {
+              MESSAGE: { type: Scratch.ArgumentType.STRING, defaultValue: 'Hello!' }
+            }
+          },
+          {
+            opcode: 'clearHistory',
+            blockType: Scratch.BlockType.COMMAND,
+            text: 'clear chat memory'
+          }
+        ]
+      };
+    }
+
+    setModel(args) {
+      this.model = String(args.MODEL);
+    }
+
+    setSystemPrompt(args) {
+      this.systemPrompt = String(args.PROMPT);
+    }
+
+    clearHistory() {
+      this.history = [];
+    }
+
+    async askBot(args) {
+      try {
+        await this.sdkReady;
+        
+        this.history.push({ role: 'user', content: String(args.MESSAGE) });
+
+        const messages = [
+          { role: 'system', content: this.systemPrompt },
+          ...this.history
+        ];
+
+        const response = await window.puter.ai.chat(messages, {
+          model: this.model
+        });
+
+        // Handle different response formats across Puter models
+        const reply = response?.message?.content || String(response);
+        this.history.push({ role: 'assistant', content: reply });
+        return reply;
+      } catch (err) {
+        return 'Puter Error: ' + (err?.message || JSON.stringify(err));
+      }
+    }
+  }
+
+  Scratch.extensions.register(new PuterChatbotExtension());
+})(Scratch);
